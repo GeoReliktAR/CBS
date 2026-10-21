@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>FDC Ballistic Calculator</title>
+
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#121212">
+
+    <!-- Leaflet CSS (Lokalnie) -->
+    <link rel="stylesheet" href="leaflet.css" />
+    
+    <!-- Proj4 for PL-2000 / PL-1992 coordinate transformation (Lokalnie) -->
+    <script src="proj4.js"></script>
+
+    <!-- Leaflet JS (Lokalnie - MUSI BYĆ TUTAJ, PRZED SKRYPTEM APLIKACJI) -->
+    <script src="leaflet.js"></script>
+
+    <link rel="manifest" href="manifest.json">
+
+    <script>
+        proj4.defs("EPSG:2176", "+proj=tmerc +lat_0=0 +lon_0=15 +k=0.99993 +x_0=5500000 +y_0=0 +ellps=GRS80 +units=m +no_defs");
+        proj4.defs("EPSG:2177", "+proj=tmerc +lat_0=0 +lon_0=18 +k=0.99993 +x_0=6500000 +y_0=0 +ellps=GRS80 +units=m +no_defs");
+        proj4.defs("EPSG:2178", "+proj=tmerc +lat_0=0 +lon_0=21 +k=0.99993 +x_0=7500000 +y_0=0 +ellps=GRS80 +units=m +no_defs");
+        proj4.defs("EPSG:2179", "+proj=tmerc +lat_0=0 +lon_0=24 +k=0.9993 +x_0=8500000 +y_0=0 +ellps=GRS80 +units=m +no_defs");
+        proj4.defs("EPSG:2180", "+proj=tmerc +lat_0=0 +lon_0=19 +k=0.9993 +x_0=500000 +y_0=-5300000 +ellps=GRS80 +units=m +no_defs");
+    </script>
+
+    <style>
+        :root {
+            --bg-color: #121212;
+            --panel-bg: #1e1e1e;
+            --accent: #ff9800;
+            --accent-hover: #f57c00;
+            --text-main: #e0e0e0;
+            --text-muted: #9e9e9e;
+            --border: #333333;
+            --danger: #f44336;
+            --success: #4caf50;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        header {
+            background-color: var(--panel-bg);
+            padding: 10px 15px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        header h1 {
+            font-size: 1.1rem;
+            margin: 0;
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column-reverse;
+            }
+        }
+
+        #map {
+            flex: 1;
+            height: 100%;
+            background: #121212;
+        }
+
+        .leaflet-container img.leaflet-image-layer {
+            max-width: none !important;
+            mix-blend-mode: normal;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+        }
+
+        .control-panel {
+            width: 390px;
+            background-color: var(--panel-bg);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 12px;
+            gap: 10px;
+            overflow-y: auto;
+            z-index: 1000;
+        }
+
+        @media (max-width: 768px) {
+            .control-panel {
+                width: 100%;
+                max-height: 52vh;
+                border-left: none;
+                border-top: 1px solid var(--border);
+            }
+        }
+
+        .section {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 10px;
+        }
+
+        .section h3 {
+            margin: 0 0 6px 0;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            color: var(--accent);
+            letter-spacing: 0.5px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 2px;
+        }
+
+        select, input, button {
+            width: 100%;
+            background: #2a2a2a;
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            box-sizing: border-box;
+            margin-bottom: 6px;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        button.btn-primary {
+            background-color: var(--accent);
+            color: #121212;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            transition: background 0.2s;
+        }
+
+        button.btn-primary:hover {
+            background-color: var(--accent-hover);
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-input-wrapper input[type=file] {
+            font-size: 100px;
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .results-box {
+            background: #111;
+            border: 2px solid var(--accent);
+            border-radius: 6px;
+            padding: 10px;
+        }
+
+        .result-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin: 8px 0;
+            background: rgba(255,255,255,0.02);
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding-bottom: 4px;
+        }
+
+        .result-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .result-label {
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .result-value {
+            color: var(--text-main);
+            font-weight: bold;
+            text-align: right;
+        }
+
+        .result-highlight {
+            color: var(--accent) !important;
+            font-size: 1.1rem !important;
+            font-weight: bold !important;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>FDC TACTICAL CALC</h1>
+        <div style="font-size: 0.75rem; color: var(--accent); font-weight: bold;">TRYB OFFLINE</div>
+    </header>
+
+    <div class="main-container">
+        <!-- Control Panel -->
+        <div class="control-panel">
+            <!-- Data Loading Section -->
+            <div class="section">
+                <h3>1. Zasoby i Mapa</h3>
+                
+                <label>Tablice balistyczne (Pliki CSV):</label>
+                <div class="file-input-wrapper">
+                    <button class="btn-primary" style="padding:6px; font-size:0.8rem;">Wybierz pliki CSV</button>
+                    <input type="file" id="csvInput" multiple accept=".csv">
+                </div>
+                <div id="csv-info" style="font-size:0.7rem; color:var(--text-muted); margin-bottom:6px;">Brak plików CSV</div>
+
+                <label>Folder z mapą (XYZ lub Obraz + PGW):</label>
+                <div class="file-input-wrapper">
+                    <button class="btn-primary" style="background:#2a2a2a; color:var(--accent); border:1px solid var(--accent); padding:6px; font-size:0.8rem;">Wybierz folder z mapą</button>
+                    <input type="file" id="mapFolderInput" webkitdirectory directory multiple>
+                </div>
+                <div id="map-info" style="font-size:0.7rem; color:var(--text-muted); margin-bottom:6px;">Brak wgranych map</div>
+
+                <label for="mapSelect" style="margin-top: 4px;">Aktywna warstwa mapy:</label>
+                <select id="mapSelect" disabled><option>Najpierw wskaź mapę</option></select>
+            </div>
+
+            <!-- Stanowisko / Position Section -->
+            <div class="section">
+                <h3>2. Stanowisko (Moździerz)</h3>
+                <label for="stanInput">Współrzędne WGS84 (Szerokość, Długość):</label>
+                <input type="text" id="stanInput" placeholder="np. 51.036, 15.828">
+                <button id="gpsBtn" style="background:#2a2a2a; color:var(--accent); border:1px solid var(--accent); font-size:0.75rem; padding:5px; margin-bottom:2px; cursor:pointer;">Pobierz pozycję z GPS</button>
+                <button id="setStanowiskoModeBtn" style="background:#2a2a2a; color:var(--success); border:1px solid var(--success); font-size:0.75rem; padding:5px; margin-top:2px; cursor:pointer;">Wskaż stanowisko na mapie</button>
+            </div>
+
+            <!-- Cel / Target Section -->
+            <div class="section">
+                <h3>3. Cel</h3>
+                <label for="celInput">Współrzędne WGS84 (Szerokość, Długość):</label>
+                <input type="text" id="celInput" placeholder="Kliknij mapę lub wpisz np. 51.040, 15.835">
+            </div>
+
+            <!-- Parameters Selection -->
+            <div class="section">
+                <h3>4. Parametry Ognia</h3>
+                <label for="mortarSelect">System / Moździerz:</label>
+                <select id="mortarSelect" disabled><option>Najpierw wskaź pliki CSV</option></select>
+
+                <label for="chargeSelect">Ładunek (Woreczek):</label>
+                <select id="chargeSelect" disabled><option>Brak danych</option></select>
+            </div>
+
+            <!-- Calculation Results -->
+            <div class="section results-box">
+                <h3 style="text-align: center; margin-bottom: 4px;">Dane Strzelnicze</h3>
+                <div class="result-list">
+                    <div class="result-row">
+                        <span class="result-label">Wybrany ładunek:</span>
+                        <span class="result-value" id="resCharge">-</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-label">Odległość:</span>
+                        <span class="result-value" id="resDist">0 m</span>
+                    </div>
+                    <div class="result-row">
+                        <span class="result-label" style="color:var(--accent); font-weight:bold;">Azymut:</span>
+                        <span class="result-value result-highlight" id="resAzimuth">--- mil</span>                    
+                    </div>
+                    <div class="result-row" style="border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 4px;">
+                        <span class="result-label" style="color:var(--accent); font-weight:bold;">Elewacja:</span>
+                        <span class="result-value result-highlight" id="resultElevation">---- mil</span>
+                    </div>
+                </div>
+                <div id="calcStatus" style="font-size:0.75rem; text-align:center; margin-top:4px; color:var(--text-muted);">Wprowadź stanowisko i cel</div>
+            </div>
+        </div>
+
+        <!-- Map Container -->
+        <div id="map"></div>
+    </div>
+
+    <script>
+        let ballisticData = {}; 
+        let availableMapFiles = {}; 
+        let currentMortar = null;
+        let map, stanowiskoMarker, celMarker;
+        let stanowiskoCoords = null; 
+        let celCoords = null; 
+        let customImageOverlay = null;
+        let currentTileLayer = null;
+        let settingStanowiskoMode = false;
+
+        const LocalTileLayer = L.TileLayer.extend({
+            getTileUrl: function (coords) {
+                const z = coords.z;
+                const x = coords.x;
+                const y = coords.y;
+                if (this.options.tileMap && 
+                    this.options.tileMap[z] && 
+                    this.options.tileMap[z][x] && 
+                    this.options.tileMap[z][x][y]) {
+                    return this.options.tileMap[z][x][y];
+                }
+                return '';
+            }
+        });
+
+        function normalizeStr(str) {
+            if (!str) return '';
+            return str.toLowerCase()
+                .replace(/ą/g, 'a').replace(/ć/g, 'c').replace(/ę/g, 'e')
+                .replace(/ł/g, 'l').replace(/ń/g, 'n').replace(/ó/g, 'o')
+                .replace(/ś/g, 's').replace(/ź/g, 'z').replace(/ż/g, 'z');
+        }
+
+        function parseWGS84(str) {
+            if (!str) return null;
+            let parts = str.trim().split(/[\s,]+/);
+            if (parts.length === 2) {
+                let lat = parseFloat(parts[0]);
+                let lon = parseFloat(parts[1]);
+                if (!isNaN(lat) && !isNaN(lon)) {
+                    return [lat, lon];
+                }
+            }
+            return null;
+        }
+
+        function padZero(num, size = 4) {
+            let s = num + "";
+            while (s.length < size) s = "0" + s;
+            return s;
+        }
+
+        function initMap() {
+            map = L.map('map', {
+                crs: L.CRS.EPSG3857,
+                zoomControl: false,
+                attributionControl: false,
+                maxZoom: 22
+            }).setView([51.036, 15.828], 12);
+
+            L.control.zoom({position: 'topright'}).addTo(map);
+
+            map.on('click', function(e) {
+                if (settingStanowiskoMode) {
+                    setStanowisko(e.latlng.lat, e.latlng.lng, true);
+                    settingStanowiskoMode = false;
+                    const btn = document.getElementById('setStanowiskoModeBtn');
+                    btn.style.background = '#2a2a2a';
+                    btn.style.color = 'var(--success)';
+                    btn.innerText = 'Wskaż stanowisko na mapie';
+                } else {
+                    setCel(e.latlng.lat, e.latlng.lng, true);
+                }
+            });
+        }
+
+        // Obsługa przycisku GPS
+        document.getElementById('gpsBtn').addEventListener('click', function() {
+            if (!navigator.geolocation) {
+                alert("Twoja przeglądarka nie obsługuje geolokalizacji.");
+                return;
+            }
+
+            document.getElementById('calcStatus').innerText = "Pobieranie pozycji z GPS...";
+
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    setStanowisko(lat, lon, true);
+                    document.getElementById('calcStatus').innerHTML = `<span style="color:var(--success)">Pobrano pozycję GPS pomyślnie</span>`;
+                },
+                function(error) {
+                    let errMessage = "Błąd GPS";
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errMessage = "Brak zgody na geolokalizację w przeglądarce.";
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errMessage = "Informacja o lokalizacji jest niedostępna.";
+                            break;
+                        case error.TIMEOUT:
+                            errMessage = "Przekroczono czas oczekiwania na sygnał GPS.";
+                            break;
+                    }
+                    alert(errMessage);
+                    document.getElementById('calcStatus').innerHTML = `<span style="color:var(--danger)">${errMessage}</span>`;
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 15000,
+                    maximumAge: 0
+                }
+            );
+        });
+
+        document.getElementById('setStanowiskoModeBtn').addEventListener('click', function() {
+            settingStanowiskoMode = true;
+            this.style.background = 'var(--success)';
+            this.style.color = '#121212';
+            this.innerText = 'Kliknij na mapie stanowisko...';
+        });
+
+        document.getElementById('stanInput').addEventListener('change', function() {
+            let coords = parseWGS84(this.value);
+            if (coords) {
+                setStanowisko(coords[0], coords[1], false);
+                map.setView(coords, 15);
+            } else {
+                alert("Nieprawidłowy format WGS84.");
+            }
+        });
+
+	function setStanowisko(lat, lng, updateInput = false) {
+            stanowiskoCoords = [lat, lng];
+            if (updateInput) {
+                document.getElementById('stanInput').value = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+            }
+
+            if (!stanowiskoMarker) {
+                stanowiskoMarker = L.circleMarker([lat, lng], {
+                    radius: 8, color: '#4caf50', fillColor: '#4caf50', fillOpacity: 0.9
+                }).addTo(map).bindPopup("Stanowisko Moździerza");
+            } else {
+                stanowiskoMarker.setLatLng([lat, lng]);
+            }
+            if (celCoords) {
+                autoSelectBestCharge(getDistanceMeters(stanowiskoCoords[0], stanowiskoCoords[1], celCoords[0], celCoords[1]));
+            }
+            calculateSolution();
+        }
+        
+        document.getElementById('celInput').addEventListener('change', function() {
+            let coords = parseWGS84(this.value);
+            if (coords) {
+                setCel(coords[0], coords[1], false);
+                map.setView(coords, 15);
+            } else {
+                alert("Nieprawidłowy format WGS84 dla celu.");
+            }
+        });
+
+        function setCel(lat, lng, updateInput = true) {
+            celCoords = [lat, lng];
+            if (updateInput) {
+                document.getElementById('celInput').value = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+            }
+
+            if (!celMarker) {
+                const targetIcon = L.divIcon({
+                    className: 'custom-target-marker',
+                    html: '<div style="background-color: #f44336; width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 5px rgba(0,0,0,0.8);"></div>',
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8]
+                });
+
+                celMarker = L.marker([lat, lng], {draggable: true, icon: targetIcon}).addTo(map).bindPopup("Cel");
+                celMarker.on('drag', function(e) {
+                    const pos = e.target.getLatLng();
+                    celCoords = [pos.lat, pos.lng];
+                    document.getElementById('celInput').value = `${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`;
+                    if (stanowiskoCoords) {
+                        autoSelectBestCharge(getDistanceMeters(stanowiskoCoords[0], stanowiskoCoords[1], celCoords[0], celCoords[1]));
+                    }
+                    calculateSolution();
+                });
+            } else {
+                celMarker.setLatLng([lat, lng]);
+            }
+
+            if (stanowiskoCoords) {
+                autoSelectBestCharge(getDistanceMeters(stanowiskoCoords[0], stanowiskoCoords[1], celCoords[0], celCoords[1]));
+            }
+            calculateSolution();
+        }
+
+        function getDistanceMeters(lat1, lon1, lat2, lon2) {
+            const R = 6371000;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        function getAzimuthMils(lat1, lon1, lat2, lon2) {
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
+            const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) -
+                      Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
+            let brng = Math.atan2(y, x) * 180 / Math.PI;
+            brng = (brng + 360) % 360;
+            let mils = Math.round((brng / 360) * 6400);
+            if (mils === 0 || mils === 6400) return 6400;
+            return mils;
+        }
+
+        function autoSelectBestCharge(dist) {
+            if (!currentMortar || !ballisticData[currentMortar]) return;
+            const mortarData = ballisticData[currentMortar];
+            const rows = mortarData.rows;
+            const numCharges = mortarData.headers.length;
+
+            let bestChargeIdx = -1;
+
+            for (let cIdx = 0; cIdx < numCharges; cIdx++) {
+                let minD = Infinity;
+                let maxD = -Infinity;
+
+                for (let r of rows) {
+                    if (r.charges[cIdx] !== null && !isNaN(r.charges[cIdx])) {
+                        if (r.dist < minD) minD = r.dist;
+                        if (r.dist > maxD) maxD = r.dist;
+                    }
+                }
+
+                if (dist >= minD && dist <= maxD) {
+                    bestChargeIdx = cIdx;
+                    break;
+                }
+            }
+
+            if (bestChargeIdx !== -1) {
+                document.getElementById('chargeSelect').value = bestChargeIdx;
+            }
+        }
+
+        // 1. Wczytywanie plików CSV
+        document.getElementById('csvInput').addEventListener('change', async function(e) {
+            const files = e.target.files;
+            if (files.length === 0) return;
+            let csvCount = 0;
+
+            for (let file of files) {
+                if (file.name.split('.').pop().toLowerCase() === 'csv') {
+                    const text = await file.text();
+                    const mortarName = file.name.replace(/\.[^/.]+\$/, "").replace(/_/g, " ");
+                    parseExcelCSV(mortarName, text);
+                    csvCount++;
+                }
+            }
+
+            if (csvCount > 0) {
+                updateMortarSelect();
+                document.getElementById('csv-info').innerText = `Wczytano plików CSV: ${csvCount}`;
+            }
+        });
+
+        // 2. Uniwersalny wybór folderu z mapą
+        document.getElementById('mapFolderInput').addEventListener('change', function(e) {
+            const files = e.target.files;
+            if (files.length === 0) return;
+
+            let xyzMap = {};
+            let xyzCount = 0;
+            let folderName = "Mapa";
+            let fileMap = {};
+
+            for (let file of files) {
+                const relPath = file.webkitRelativePath || file.name;
+                const parts = relPath.split('/');
+                
+                if (parts.length > 1 && folderName === "Mapa") {
+                    folderName = parts[0];
+                }
+
+                fileMap[file.name.toLowerCase()] = file;
+
+                if (parts.length >= 3) {
+                    const fileName = parts[parts.length - 1];
+                    const ext = fileName.split('.').pop().toLowerCase();
+                    if (['png', 'jpg', 'jpeg'].includes(ext)) {
+                        const yStr = fileName.substring(0, fileName.lastIndexOf('.'));
+                        const xStr = parts[parts.length - 2];
+                        const zStr = parts[parts.length - 3];
+                        
+                        const z = parseInt(zStr, 10);
+                        const x = parseInt(xStr, 10);
+                        const y = parseInt(yStr, 10);
+                        
+                        if (!isNaN(z) && !isNaN(x) && !isNaN(y)) {
+                            if (!xyzMap[z]) xyzMap[z] = {};
+                            if (!xyzMap[z][x]) xyzMap[z][x] = {};
+                            xyzMap[z][x][y] = URL.createObjectURL(file);
+                            xyzCount++;
+                        }
+                    }
+                }
+            }
+
+            let addedCount = 0;
+
+            if (xyzCount > 0) {
+                let extractedCoords = null;
+                const coordMatch = folderName.match(/([0-9]{2}\.[0-9]+)[_\s,-]+([0-9]{2}\.[0-9]+)/);
+                if (coordMatch) {
+                    let lat = parseFloat(coordMatch[1].replace(',', '.'));
+                    let lon = parseFloat(coordMatch[2].replace(',', '.'));
+                    if (!isNaN(lat) && !isNaN(lon)) {
+                        extractedCoords = [lat, lon];
+                    }
+                }
+
+                const mapName = `XYZ: ${folderName}`;
+                availableMapFiles[mapName] = { 
+                    type: 'xyz', 
+                    tileMap: xyzMap, 
+                    center: extractedCoords 
+                };
+                addedCount++;
+            }
+
+            for (let file of files) {
+                const ext = file.name.split('.').pop().toLowerCase();
+                if (['png', 'jpg', 'jpeg'].includes(ext)) {
+                    const relPath = file.webkitRelativePath || file.name;
+                    const parts = relPath.split('/');
+                    if (parts.length >= 3 && !isNaN(parseInt(parts[parts.length - 3], 10))) {
+                        continue;
+                    }
+
+                    const baseName = file.name.substring(0, file.name.lastIndexOf('.'));
+                    const worldFile = fileMap[(baseName + '.pgw').toLowerCase()] ||
+                                      fileMap[(baseName + '.wld').toLowerCase()] ||
+                                      fileMap[(baseName + '.jgw').toLowerCase()];
+                    
+                    const rasterName = `Raster: ${file.name}`;
+                    availableMapFiles[rasterName] = { type: 'classic', image: file, world: worldFile };
+                    addedCount++;
+                }
+            }
+
+            if (addedCount > 0) {
+                const keys = Object.keys(availableMapFiles);
+                const firstKey = keys[keys.length - 1];
+                updateMapSelect(firstKey);
+                document.getElementById('map-info').innerText = `Załadowano: ${addedCount} (Folder: ${folderName})`;
+            } else {
+                alert("Nie znaleziono kafelków XYZ ani poprawnych map w wybranym folderze.");
+            }
+        });
+
+        function updateMapSelect(selectKey = null) {
+            const select = document.getElementById('mapSelect');
+            select.innerHTML = '<option value="">-- Wybierz mapę --</option>';
+            const mapNames = Object.keys(availableMapFiles);
+
+            if (mapNames.length === 0) {
+                select.disabled = true;
+                return;
+            }
+
+            mapNames.forEach(mName => {
+                const opt = document.createElement('option');
+                opt.value = mName;
+                opt.innerText = mName;
+                select.appendChild(opt);
+            });
+            select.disabled = false;
+
+            if (selectKey && availableMapFiles[selectKey]) {
+                select.value = selectKey;
+                loadSelectedMap(selectKey);
+            } else if (mapNames.length > 0) {
+                select.value = mapNames[0];
+                loadSelectedMap(mapNames[0]);
+            }
+        }
+
+        document.getElementById('mapSelect').addEventListener('change', function(e) {
+            if (e.target.value) loadSelectedMap(e.target.value);
+        });
+
+        function loadSelectedMap(mapName) {
+            const mapData = availableMapFiles[mapName];
+            if (!mapData) return;
+
+            if (customImageOverlay) { map.removeLayer(customImageOverlay); customImageOverlay = null; }
+            if (currentTileLayer) { map.removeLayer(currentTileLayer); currentTileLayer = null; }
+
+            if (mapData.type === 'xyz') {
+                currentTileLayer = new LocalTileLayer('', {
+                    tileMap: mapData.tileMap,
+                    maxZoom: 22,
+                    minZoom: 0,
+                    tileSize: 256,
+                    errorTileUrl: ''
+                }).addTo(map);
+
+                if (mapData.center) {
+                    map.setView(mapData.center, 14);
+                } else {
+                    map.setView([51.036, 15.828], 13);
+                }
+            } else {
+                loadClassicMap(mapData.image, mapData.world);
+            }
+        }
+
+        function parseExcelCSV(mortarName, text) {
+            const lines = text.trim().split(/\r\n|\n/).map(l => l.split(';').map(c => c.trim()));
+            if (lines.length < 2) return;
+
+            const headerRow = lines[0];
+            let chargeHeaders = [];
+            let chargeCounter = 1;
+
+            for (let j = 1; j < headerRow.length; j++) {
+                let cellVal = (headerRow[j] || '').trim();
+                let normCell = normalizeStr(cellVal);
+
+                if (!cellVal || normCell === 'mills' || normCell.includes('mils') || normCell === 'm') {
+                    chargeHeaders.push(`Ładunek ${chargeCounter}`);
+                } else {
+                    chargeHeaders.push(cellVal);
+                }
+                chargeCounter++;
+            }
+
+            const rows = [];
+            for (let i = 1; i < lines.length; i++) {
+                const cols = lines[i];
+                if (!cols || cols.length === 0) continue;
+
+                let distRaw = cols[0];
+                if (!distRaw || distRaw === '') continue;
+
+                const distVal = parseFloat(distRaw.replace(',', '.'));
+                if (isNaN(distVal)) continue;
+
+                const charges = [];
+                for (let j = 1; j <= chargeHeaders.length; j++) {
+                    if (j < cols.length) {
+                        const rawVal = cols[j] ? cols[j].replace(',', '.') : '';
+                        const val = parseFloat(rawVal);
+                        charges.push(isNaN(val) || rawVal === '' ? null : val);
+                    } else {
+                        charges.push(null);
+                    }
+                }
+                rows.push({ dist: distVal, charges });
+            }
+
+            ballisticData[mortarName] = { headers: chargeHeaders, rows };
+        }
+
+        function updateMortarSelect() {
+            const select = document.getElementById('mortarSelect');
+            select.innerHTML = '<option value="">-- Wybierz moździerz --</option>';
+            for (let mName in ballisticData) {
+                const opt = document.createElement('option');
+                opt.value = mName;
+                opt.innerText = mName;
+                select.appendChild(opt);
+            }
+            select.disabled = false;
+
+            const keys = Object.keys(ballisticData);
+            if (keys.length > 0) {
+                select.value = keys[0];
+                currentMortar = keys[0];
+                updateChargeSelect();
+            }
+        }
+
+        document.getElementById('mortarSelect').addEventListener('change', function(e) {
+            currentMortar = e.target.value;
+            updateChargeSelect();
+            if (celCoords && stanowiskoCoords) {
+                autoSelectBestCharge(getDistanceMeters(stanowiskoCoords[0], stanowiskoCoords[1], celCoords[0], celCoords[1]));
+            }
+            calculateSolution();
+        });
+
+        function updateChargeSelect() {
+            const select = document.getElementById('chargeSelect');
+            select.innerHTML = '<option value="">-- Wybierz ładunek --</option>';
+            if (!currentMortar || !ballisticData[currentMortar]) {
+                select.disabled = true;
+                return;
+            }
+
+            const headers = ballisticData[currentMortar].headers;
+            headers.forEach((hName, idx) => {
+                const opt = document.createElement('option');
+                opt.value = idx;
+                opt.innerText = hName;
+                select.appendChild(opt);
+            });
+            select.disabled = false;
+        }
+
+        document.getElementById('chargeSelect').addEventListener('change', calculateSolution);
+
+        async function loadClassicMap(imageFile, worldFile) {
+            let pgwLines = null;
+            if (worldFile) {
+                try {
+                    const text = await worldFile.text();
+                    pgwLines = text.trim().split(/\r\n|\n/).map(l => parseFloat(l.replace(',', '.')));
+                } catch(e) {
+                    console.warn("Błąd odczytu pliku kalibracyjnego:", e);
+                }
+            }
+
+            const imageUrl = URL.createObjectURL(imageFile);
+            const img = new Image();
+            img.onload = function() {
+                const width = img.width, height = img.height;
+                let bounds;
+
+                if (pgwLines && pgwLines.length >= 6 && !isNaN(pgwLines[0])) {
+                    const A = pgwLines[0]; 
+                    const D = pgwLines[1]; 
+                    const B = pgwLines[2]; 
+                    let E = pgwLines[3];   
+                    const C = pgwLines[4]; 
+                    const valF = pgwLines[5];    
+
+                    if (E > 0) E = -E;
+
+                    const realX = valF;
+                    const realY = C;
+
+                    const ulX = realX - 0.5 * A;
+                    const ulY = realY - 0.5 * E;
+                    const brX = realX + (width - 0.5) * A;
+                    const brY = realY + (height - 0.5) * E;
+
+                    let sourceEPSG = "EPSG:2180"; 
+                    let millionsX = Math.floor(ulX / 1000000);
+                    let millionsY = Math.floor(ulY / 1000000);
+                    let detectedMillions = [5, 6, 7, 8].includes(millionsX) ? millionsX : ([5, 6, 7, 8].includes(millionsY) ? millionsY : 0);
+
+                    if (detectedMillions === 5) sourceEPSG = "EPSG:2176";
+                    else if (detectedMillions === 6) sourceEPSG = "EPSG:2177";
+                    else if (detectedMillions === 7) sourceEPSG = "EPSG:2178";
+                    else if (detectedMillions === 8) sourceEPSG = "EPSG:2179";
+
+                    try {
+                        const ulWgs = proj4(sourceEPSG, "EPSG:4326", [ulX, ulY]);
+                        const brWgs = proj4(sourceEPSG, "EPSG:4326", [brX, brY]);
+                        bounds = [
+                            [Math.min(ulWgs[1], brWgs[1]), Math.min(ulWgs[0], brWgs[0])],
+                            [Math.max(ulWgs[1], brWgs[1]), Math.max(ulWgs[0], brWgs[0])]
+                        ];
+                    } catch (err) {
+                        bounds = [[51.00, 15.70], [51.10, 15.90]];
+                    }
+                } else {
+                    const centerLat = 51.036;
+                    const centerLon = 15.828;
+                    const latSpan = 0.3 * (height / Math.max(width, height));
+                    const lonSpan = 0.3 * (width / Math.max(width, height));
+                    bounds = [
+                        [centerLat - latSpan / 2, centerLon - lonSpan / 2],
+                        [centerLat + latSpan / 2, centerLon + lonSpan / 2]
+                    ];
+                }
+
+                if (customImageOverlay) map.removeLayer(customImageOverlay);
+                customImageOverlay = L.imageOverlay(imageUrl, bounds, { maxNativeZoom: 22, interactive: false }).addTo(map);
+                map.fitBounds(bounds);
+            };
+            img.src = imageUrl;
+        }
+
+        function calculateSolution() {
+            if (!stanowiskoCoords || !celCoords || !currentMortar) {
+                document.getElementById('calcStatus').innerText = "Podaj stanowisko, cel i wybierz moździerz";
+                return;
+            }
+
+            const dist = getDistanceMeters(stanowiskoCoords[0], stanowiskoCoords[1], celCoords[0], celCoords[1]);
+            const azimuth = getAzimuthMils(stanowiskoCoords[0], stanowiskoCoords[1], celCoords[0], celCoords[1]);
+
+            document.getElementById('resDist').innerText = Math.round(dist) + " m";
+            document.getElementById('resAzimuth').innerText = padZero(azimuth) + " mil";
+
+            const chargeSelectEl = document.getElementById('chargeSelect');
+            if (chargeSelectEl.value === "" && currentMortar) {
+                autoSelectBestCharge(dist);
+            }
+
+            const chargeIdxStr = chargeSelectEl.value;
+            if (chargeIdxStr === "") {
+                document.getElementById('resultElevation').innerText = "----";
+                document.getElementById('resCharge').innerText = "-";
+                document.getElementById('calcStatus').innerText = "Brak ładunku w zasięgu";
+                return;
+            }
+
+            const chargeIdx = parseInt(chargeIdxStr);
+            const mortarData = ballisticData[currentMortar];
+            document.getElementById('resCharge').innerText = mortarData.headers[chargeIdx] || `Ładunek ${chargeIdx + 1}`;
+
+            const rows = mortarData.rows;
+            let lowerRow = null, upperRow = null;
+
+            for (let i = 0; i < rows.length; i++) {
+                const val = rows[i].charges[chargeIdx];
+                if (val !== null && !isNaN(val)) {
+                    if (rows[i].dist <= dist) lowerRow = rows[i];
+                    if (rows[i].dist >= dist && !upperRow) {
+                        upperRow = rows[i];
+                        break;
+                    }
+                }
+            }
+
+            const minAllowedDist = rows.find(r => r.charges[chargeIdx] !== null)?.dist || 0;
+            let maxAllowedDist = 0;
+            for (let i = rows.length - 1; i >= 0; i--) {
+                if (rows[i].charges[chargeIdx] !== null) { maxAllowedDist = rows[i].dist; break; }
+            }
+
+            if (dist < minAllowedDist || dist > maxAllowedDist) {
+                document.getElementById('resultElevation').innerText = "POZA ZASIĘGIEM";
+                document.getElementById('calcStatus').innerHTML = `<span style="color:var(--danger)">Cel poza zasięgiem (Min: ${minAllowedDist}m, Max: ${maxAllowedDist}m)</span>`;
+                return;
+            }
+
+            let elevation = null;
+            if (lowerRow && lowerRow.dist === dist) {
+                elevation = lowerRow.charges[chargeIdx];
+            } else if (lowerRow && upperRow) {
+                const x = dist, x1 = lowerRow.dist, x2 = upperRow.dist, y1 = lowerRow.charges[chargeIdx], y2 = upperRow.charges[chargeIdx];
+                elevation = (x1 === x2) ? y1 : y1 + (x - x1) * (y2 - y1) / (x2 - x1);
+            }
+
+            if (elevation !== null) {
+                const roundedElevation = Math.round(elevation);
+                document.getElementById('resultElevation').innerText = roundedElevation + " mil";
+                document.getElementById('calcStatus').innerHTML = `<span style="color:var(--success)">Dane wyliczone poprawnie</span>`;
+            } else {
+                document.getElementById('resultElevation').innerText = "BRAK DANYCH";
+                document.getElementById('calcStatus').innerHTML = `<span style="color:var(--danger)">Brak danych w tabeli dla tej odległości</span>`;
+            }
+        }
+
+        window.onload = initMap;
+    </script>
+</body>
+</html>
